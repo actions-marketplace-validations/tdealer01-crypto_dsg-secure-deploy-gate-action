@@ -1,5 +1,5 @@
-name: "DSG Secure Deploy Gate"
-description: "Deterministic production readiness, security, and governance gate for CI/CD."
+name: "DSG Verified Execution Gate"
+description: "Verify authorized execution, replay, evidence, and deterministic constraints with Cinema + exact Z3 proof receipts."
 author: "tdealer01-crypto"
 
 branding:
@@ -7,121 +7,99 @@ branding:
   color: "blue"
 
 inputs:
-  readiness_url:
-    description: "Readiness endpoint URL."
+  endpoint:
+    description: "Cinema /verify/evaluate endpoint URL."
     required: true
-  expected_status:
-    description: "Expected readiness HTTP status code."
-    required: false
-    default: "200"
-  require_json_ok:
-    description: "Require response JSON to contain ok=true."
-    required: false
-    default: "true"
-  protected_url:
-    description: "Optional protected route URL expected to deny unauthenticated access."
+  api_key:
+    description: >-
+      Optional DSG API key. Supply it to meter and attribute this workflow's
+      proofs to your account. Obtain one with POST /billing/activate.
     required: false
     default: ""
-  protected_expected:
-    description: "Comma-separated expected unauthenticated status codes for protected route."
+  approved_plan_hash:
+    description: "SHA-256 of the approved plan."
+    required: true
+  proposed_action_hash:
+    description: "SHA-256 of the proposed/executed action."
+    required: true
+  execution_id:
+    description: "Stable execution identifier. Defaults to the GitHub run identity."
     required: false
-    default: "401,403"
-  preset:
-    description: "Gate preset: basic, standard, strict, or audit-only."
+    default: ""
+  trace_id:
+    description: "Optional cross-system trace identifier."
     required: false
-    default: "strict"
-  comment_on_pr:
-    description: "Post or update a DSG result comment on pull requests."
+    default: ""
+  agent_identity:
+    description: "Agent/runtime identity recorded in the receipt."
+    required: false
+    default: "github-actions"
+  authorized:
+    description: "Explicit authorization result. Required; no permissive default."
+    required: true
+  plan_aligned:
+    description: "Explicit approved-plan alignment result. Required; no permissive default."
+    required: true
+  constraints_pass:
+    description: "Explicit deterministic constraint result. Required; no permissive default."
+    required: true
+  execution_succeeded:
+    description: "Explicit observed execution result. Required; no permissive default."
+    required: true
+  replay_match:
+    description: "Explicit replay comparison result. Required; no permissive default."
+    required: true
+  evidence_complete:
+    description: "Explicit evidence completeness result. Required; no permissive default."
+    required: true
+  cost_microunits:
+    description: "Optional execution cost in application-defined microunits."
+    required: false
+    default: "0"
+  receipt_file:
+    required: false
+    default: "dsg-proof-receipt.json"
+  fail_on_review:
+    description: "Fail the job on REVIEW as well as BLOCK."
     required: false
     default: "false"
-  evidence_file:
-    description: "Path to write deterministic evidence JSON."
-    required: false
-    default: "dsg-evidence.json"
-  policy_name:
-    description: "Policy name recorded in evidence."
-    required: false
-    default: "production-readiness"
-  policy_version:
-    description: "Policy version recorded in evidence."
-    required: false
-    default: "v1"
-  previous_proof_hash:
-    description: "Optional previous proof hash for chain linking."
-    required: false
-    default: ""
-  proof_timestamp:
-    description: "Optional fixed proof timestamp for reproducible fixtures. Defaults to current UTC time."
-    required: false
-    default: ""
-  fail_on_no_go:
-    description: "Fail the job when verdict is NO-GO. Ignored for audit-only preset."
-    required: false
-    default: "true"
 
 outputs:
-  verdict:
-    description: "GO or NO-GO result."
-    value: ${{ steps.dsg_gate.outputs.verdict }}
-  readiness_status:
-    description: "Readiness HTTP status."
-    value: ${{ steps.dsg_gate.outputs.readiness_status }}
-  protected_status:
-    description: "Protected route HTTP status, when checked."
-    value: ${{ steps.dsg_gate.outputs.protected_status }}
-  failure_reason:
-    description: "Machine-readable NO-GO reason."
-    value: ${{ steps.dsg_gate.outputs.failure_reason }}
-  evidence_hash:
-    description: "SHA256 hash of canonical evidence."
-    value: ${{ steps.dsg_gate.outputs.evidence_hash }}
-  policy_hash:
-    description: "SHA256 hash of canonical policy."
-    value: ${{ steps.dsg_gate.outputs.policy_hash }}
+  decision:
+    description: "ALLOW, REVIEW, or BLOCK."
+    value: ${{ steps.verify.outputs.decision }}
   proof_hash:
-    description: "SHA256 hash of canonical proof."
-    value: ${{ steps.dsg_gate.outputs.proof_hash }}
-  chain_hash:
-    description: "SHA256 proof chain hash."
-    value: ${{ steps.dsg_gate.outputs.chain_hash }}
-  evidence_file:
-    description: "Path to the evidence JSON file."
-    value: ${{ steps.dsg_gate.outputs.evidence_file }}
+    description: "Exact Z3 proof hash."
+    value: ${{ steps.verify.outputs.proof_hash }}
+  context_hash:
+    description: "Deterministic verification context hash."
+    value: ${{ steps.verify.outputs.context_hash }}
+  receipt_file:
+    value: ${{ steps.verify.outputs.receipt_file }}
+  remediation:
+    description: "When the call is refused, the single next action that resolves it."
+    value: ${{ steps.verify.outputs.remediation }}
 
 runs:
   using: "composite"
   steps:
-    - name: Run DSG Secure Deploy Gate
-      id: dsg_gate
+    - id: verify
       shell: bash
-      run: |
-        bash "$GITHUB_ACTION_PATH/scripts/dsg-gate.sh"
+      run: bash "$GITHUB_ACTION_PATH/scripts/verified-execution.sh"
       env:
-        DSG_READINESS_URL: ${{ inputs.readiness_url }}
-        DSG_EXPECTED_STATUS: ${{ inputs.expected_status }}
-        DSG_REQUIRE_JSON_OK: ${{ inputs.require_json_ok }}
-        DSG_PROTECTED_URL: ${{ inputs.protected_url }}
-        DSG_PROTECTED_EXPECTED: ${{ inputs.protected_expected }}
-        DSG_PRESET: ${{ inputs.preset }}
-        DSG_EVIDENCE_FILE: ${{ inputs.evidence_file }}
-        DSG_POLICY_NAME: ${{ inputs.policy_name }}
-        DSG_POLICY_VERSION: ${{ inputs.policy_version }}
-        DSG_PREVIOUS_PROOF_HASH: ${{ inputs.previous_proof_hash }}
-        DSG_PROOF_TIMESTAMP: ${{ inputs.proof_timestamp }}
-    - name: Post DSG PR comment
-      if: ${{ always() && inputs.comment_on_pr == 'true' && github.event_name == 'pull_request' }}
-      shell: bash
-      run: |
-        bash "$GITHUB_ACTION_PATH/scripts/dsg-pr-comment.sh"
-      env:
-        DSG_EVIDENCE_FILE: ${{ inputs.evidence_file }}
-        GITHUB_TOKEN: ${{ github.token }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
-        GITHUB_API_URL: ${{ github.api_url }}
-    - name: Enforce DSG verdict
-      if: ${{ always() && inputs.fail_on_no_go == 'true' && inputs.preset != 'audit-only' && steps.dsg_gate.outputs.verdict != 'GO' }}
-      shell: bash
-      run: |
-        echo "DSG gate failed: ${{ steps.dsg_gate.outputs.failure_reason }}"
-        exit 1
+        DSG_ENDPOINT: ${{ inputs.endpoint }}
+        DSG_API_KEY: ${{ inputs.api_key }}
+        DSG_APPROVED_PLAN_HASH: ${{ inputs.approved_plan_hash }}
+        DSG_PROPOSED_ACTION_HASH: ${{ inputs.proposed_action_hash }}
+        DSG_EXECUTION_ID: ${{ inputs.execution_id }}
+        DSG_TRACE_ID: ${{ inputs.trace_id }}
+        DSG_AGENT_IDENTITY: ${{ inputs.agent_identity }}
+        DSG_AUTHORIZED: ${{ inputs.authorized }}
+        DSG_PLAN_ALIGNED: ${{ inputs.plan_aligned }}
+        DSG_CONSTRAINTS_PASS: ${{ inputs.constraints_pass }}
+        DSG_EXECUTION_SUCCEEDED: ${{ inputs.execution_succeeded }}
+        DSG_REPLAY_MATCH: ${{ inputs.replay_match }}
+        DSG_EVIDENCE_COMPLETE: ${{ inputs.evidence_complete }}
+        DSG_COST_MICROUNITS: ${{ inputs.cost_microunits }}
+        DSG_RECEIPT_FILE: ${{ inputs.receipt_file }}
+        DSG_FAIL_ON_REVIEW: ${{ inputs.fail_on_review }}

@@ -1,18 +1,61 @@
-# DSG Secure Deploy Gate
+# DSG Verified Execution Gate
 
-**Block unsafe production deploys before they ship. Create deterministic proof for every release.**
+**Prove an automated action was authorized before you let it stand. Get a signed proof receipt for every run.**
 
-DSG Secure Deploy Gate is an open-source GitHub Action for production readiness checks, protected-route checks, and deterministic GO / NO-GO evidence.
+v2 sends a bounded set of hashes and booleans to the Cinema `/verify/evaluate`
+endpoint, which returns `ALLOW`, `REVIEW`, or `BLOCK` only when exact Z3
+proves `VERIFIED_GLOBAL_OPTIMUM`. Anything less is reported as `REVIEW` — the
+Action never converts an unverified proof into an approval.
 
-It is designed for teams that need deploy evidence, CI/CD governance, and a clean upgrade path to an audit dashboard.
+Built for teams running AI agents or automated deploys that need to answer
+"who authorized this, and can you prove it" after the fact.
 
-> **Truth boundary:** this Action helps generate repeatable deployment evidence. It is not, by itself, a PDPA, ISO 27001, SOC 2, WORM, or third-party compliance certification.
+> **Truth boundary:** this Action generates reproducible execution evidence. It
+> is not, by itself, a PDPA, ISO 27001, SOC 2, WORM, or third-party compliance
+> certification.
 
 ## Links
 
-- Landing page: https://tdealer01-crypto-dsg-control-plane.vercel.app/proofgate-github-action
+- Landing page: https://dsgoneverifiedweb.z1.web.core.windows.net/
+- API docs: https://dsg-cinema-production.nicetree-a005fe99.westus3.azurecontainerapps.io/docs
 - Demo repo: https://github.com/tdealer01-crypto/dsg-gate-demo-nextjs
 - Marketplace: https://github.com/marketplace/actions/dsg-secure-deploy-gate
+
+## Upgrading from v1
+
+v1 (`DSG Secure Deploy Gate`, readiness-probe contract) stays available under
+its immutable tags — `@v1.1.0` and earlier are unaffected by this release. See
+[MIGRATION.md](MIGRATION.md) for the v1 → v2 mapping.
+
+## v2 quick start
+
+```yaml
+- uses: tdealer01-crypto/dsg-secure-deploy-gate-action@v2.0.0
+  id: gate
+  with:
+    endpoint: https://dsg-cinema-production.nicetree-a005fe99.westus3.azurecontainerapps.io/verify/evaluate
+    api_key: ${{ secrets.DSG_API_KEY }}   # optional; free plan allows 25 proofs
+    approved_plan_hash: ${{ steps.plan.outputs.sha256 }}
+    proposed_action_hash: ${{ steps.action.outputs.sha256 }}
+    authorized: 'true'
+    plan_aligned: 'true'
+    constraints_pass: 'true'
+    execution_succeeded: 'true'
+    replay_match: 'true'
+    evidence_complete: 'true'
+    fail_on_review: 'true'
+
+- run: echo "${{ steps.gate.outputs.decision }} ${{ steps.gate.outputs.proof_hash }}"
+```
+
+Outputs: `decision`, `proof_hash`, `context_hash`, `receipt_file`,
+`remediation`. The receipt is written to `dsg-proof-receipt.json`.
+
+---
+
+## v1 reference (readiness gate)
+
+Everything below documents the v1 contract, still served by `@v1.1.0`.
 
 ---
 
